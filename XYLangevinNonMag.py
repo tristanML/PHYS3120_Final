@@ -134,9 +134,10 @@ def step(frame,spins,im):
     prevSpins[:] = spins[:]
     spins[:] = newSpins
 
+    spins[mask==1] = (spins[mask==1]+np.pi)%(2*np.pi)-np.pi
     spins[mask == 0] = 10
 
-    im.set_data((spins+np.pi)%(2*np.pi)-np.pi)
+    im.set_data(spins)
     return [im]
 # Let's put a "nonmagnetic" square in the middle
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
