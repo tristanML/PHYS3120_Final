@@ -138,7 +138,8 @@ def step(frame,spins,im):
 
     im.set_data((spins+np.pi)%(2*np.pi)-np.pi)
     return [im]
-
+# Let's put a "nonmagnetic" square in the middle
+# mask[N//4:3*N//4, N//4:3*N//4] = 0
 def onclick(event):
     if event.inaxes == ax:
         # Get coordinates
