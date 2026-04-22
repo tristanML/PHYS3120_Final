@@ -8,7 +8,7 @@ I = 0.1
 k = 1
 #----
 T = 0.4
-dt = 0.001
+dt = 0.005
 J = 5
 N = 100
 gam = 1.5
@@ -23,19 +23,19 @@ alpha = 0
 #---axis and sliders --------------------
 fig, ax = plt.subplots(figsize = (6,6))
 plt.subplots_adjust(bottom=0.35)
-axsliderT = plt.axes([0.2, 0.02, 0.6, 0.02])
-axsliderH0 = plt.axes([0.2, 0.06, 0.6, 0.02])
-axsliderNH = plt.axes([0.2, 0.10, 0.6, 0.02])
-axsliderJ = plt.axes([0.2, 0.14, 0.6, 0.02])
-axsliderGAM = plt.axes([0.2, 0.18, 0.6, 0.02])
-
+axsliderT = plt.axes([0.2, 0.01, 0.6, 0.02])
+axsliderH0 = plt.axes([0.2, 0.04, 0.6, 0.02])
+axsliderNH = plt.axes([0.2, 0.07, 0.6, 0.02])
+axsliderJ = plt.axes([0.2, 0.10, 0.6, 0.02])
+axsliderGAM = plt.axes([0.2, 0.13, 0.6, 0.02])
+axsliderI = plt.axes([0.2,0.16,0.6,0.02])
 
 sliderT = Slider(axsliderT,'T', 0, 10.0, valinit = T)
 sliderH0 = Slider(axsliderH0,'H0', 0, 100.0, valinit = H0)
 sliderNH = Slider(axsliderNH,'Width of H', 0, N//2-1, valinit = 0,valstep =1)
 sliderJ = Slider(axsliderJ,'J', 0, 100.0, valinit = J)
 sliderGAM = Slider(axsliderGAM,'Gamma', 0.1, 5.0, valinit = gam)
-
+sliderI = Slider(axsliderI, 'I', 0.01, 10, valinit = I)
 def update_T(val):
     global T
     T = sliderT.val
@@ -58,18 +58,21 @@ def update_GAM(val):
     global gam
     gam = sliderGAM.val
 
+def update_I(val):
+    global I
+    I = sliderI.val
+
 sliderT.on_changed(update_T)
 sliderH0.on_changed(update_H0)
 sliderNH.on_changed(update_NH)
 sliderJ.on_changed(update_J)
 sliderGAM.on_changed(update_GAM)
+sliderI.on_changed(update_I)
 
 
 #----------------------------------------------
-initSpins = {"Up": np.full((N,N), np.pi-2*np.pi*random.random()),
-             "Random": np.random.uniform(-np.pi,np.pi, size = (N,N))
-             }
 spins = np.full((N,N), np.pi-2*np.pi*random.random())
+prevSpins = spins.copy()
 
 button1_ax = plt.axes([0.2, 0.21, 0.25, 0.05])
 button2_ax = plt.axes([0.5, 0.21, 0.25, 0.05])
@@ -77,11 +80,15 @@ button1 = Button(button1_ax, 'Align Spins')
 button2 = Button(button2_ax, 'Randomize Spins')
 
 def reset1(event):
-    global spins
-    spins[:] = initSpins["Up"]
+    global spins, prevSpins
+    spins[:] = np.full((N,N), np.pi-2*np.pi*random.random())
+    prevSpins = spins.copy()
+
 def reset2(event):
-    global spins
-    spins[:] = initSpins["Random"]
+    global spins, prevSpins
+    spins[:] = np.random.uniform(-np.pi,np.pi, size = (N,N))
+    prevSpins = spins.copy()
+
     
 button1.on_clicked(reset1)
 button2.on_clicked(reset2)
@@ -98,7 +105,7 @@ def get_Mag(spins):
 def set_H(a, h_theta, H0, update_spins):
     H = np.zeros((N,N)) 
     if a == 0:
-        H[N//2][N//2] = H0
+        #H[N//2][N//2] = H0
         return H, h_theta
     else:
         for i in range(N//2-a,N//2+a+1):
@@ -112,7 +119,6 @@ H, alpha = set_H(NH,0,H0,update_spins = False)
 mask = np.ones((N, N))
 # Let's put a "nonmagnetic" square in the middle
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
-
 def step(frame,spins,im):
     eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)
     sTop = np.roll(spins, 1, axis = 1)
@@ -122,8 +128,11 @@ def step(frame,spins,im):
 
     exch = -J*(np.sin(spins-sTop)+np.sin(spins-sBot)+np.sin(spins-sLeft)+np.sin(spins-sRight))
     hInt = -H*np.sin(spins-alpha)
-    spins[:] = spins + (exch+eta+hInt)*dt/gam*mask
-    spins[:]=(spins + np.pi) % (2*np.pi) - np.pi
+    pot = exch+eta+hInt
+    #spins[:] = spins + (exch+eta+hInt)*dt/gam
+    newSpins = 1/(1+gam/(2*I)*dt)*( (pot)/I*dt**2 + 2*spins  - (1-gam/(2*I)*dt)*prevSpins )
+    prevSpins[:] = spins[:]
+    spins[:] = newSpins
 
     spins[mask == 0] = 10
 
