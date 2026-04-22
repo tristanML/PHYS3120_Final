@@ -120,27 +120,25 @@ mask = np.ones((N, N))
 # Let's put a "nonmagnetic" square in the middle
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
 def step(frame,spins,im):
-    eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)
-    sTop = np.roll(spins, 1, axis = 1)
-    sBot = np.roll(spins, -1, axis = 1)
-    sLeft = np.roll(spins, 1, axis = 0)
-    sRight = np.roll(spins, -1, axis = 0)
+    eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)*mask
+    sTop = np.roll(spins*mask, 1, axis = 1)
+    sBot = np.roll(spins*mask, -1, axis = 1)
+    sLeft = np.roll(spins*mask, 1, axis = 0)
+    sRight = np.roll(spins*mask, -1, axis = 0)
 
-    exch = -J*(np.sin(spins-sTop)+np.sin(spins-sBot)+np.sin(spins-sLeft)+np.sin(spins-sRight))
-    hInt = -H*np.sin(spins-alpha)
+    exch = -J*(np.sin(spins*mask-sTop)+np.sin(spins*mask-sBot)+np.sin(spins*mask-sLeft)+np.sin(spins*mask-sRight))*mask
+    hInt = -H*np.sin(spins-alpha)*mask
     pot = exch+eta+hInt
     #spins[:] = spins + (exch+eta+hInt)*dt/gam
     newSpins = 1/(1+gam/(2*I)*dt)*( (pot)/I*dt**2 + 2*spins  - (1-gam/(2*I)*dt)*prevSpins )
     prevSpins[:] = spins[:]
     spins[:] = newSpins
 
-    spins[mask==1] = (spins[mask==1]+np.pi)%(2*np.pi)-np.pi
     spins[mask == 0] = 10
 
-    im.set_data(spins)
+    im.set_data((spins*mask+np.pi)%(2*np.pi)-np.pi)
     return [im]
-# Let's put a "nonmagnetic" square in the middle
-# mask[N//4:3*N//4, N//4:3*N//4] = 0
+
 def onclick(event):
     if event.inaxes == ax:
         # Get coordinates
