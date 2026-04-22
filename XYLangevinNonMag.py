@@ -121,12 +121,16 @@ mask = np.ones((N, N))
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
 def step(frame,spins,im):
     eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)*mask
-    sTop = np.roll(spins*mask, 1, axis = 1)
-    sBot = np.roll(spins*mask, -1, axis = 1)
-    sLeft = np.roll(spins*mask, 1, axis = 0)
-    sRight = np.roll(spins*mask, -1, axis = 0)
+    sTop = np.roll(spins, 1, axis = 1)
+    sBot = np.roll(spins, -1, axis = 1)
+    sLeft = np.roll(spins, 1, axis = 0)
+    sRight = np.roll(spins, -1, axis = 0)
 
-    exch = -J*(np.sin(spins*mask-sTop)+np.sin(spins*mask-sBot)+np.sin(spins*mask-sLeft)+np.sin(spins*mask-sRight))*mask
+    exch = -J*(np.sin(spins-sTop)*np.roll(mask, 1, axis = 1)
+               +np.sin(spins-sBot)*np.roll(mask, -1, axis = 1)
+               +np.sin(spins-sLeft)*np.roll(mask, 1, axis = 0)
+               +np.sin(spins-sRight)*np.roll(mask, -1, axis = 0)
+               )*mask
     hInt = -H*np.sin(spins-alpha)*mask
     pot = exch+eta+hInt
     #spins[:] = spins + (exch+eta+hInt)*dt/gam
@@ -134,9 +138,10 @@ def step(frame,spins,im):
     prevSpins[:] = spins[:]
     spins[:] = newSpins
 
-    spins[mask == 0] = 10
 
     im.set_data((spins*mask+np.pi)%(2*np.pi)-np.pi)
+
+    spins[mask == 0] = 10
     return [im]
 
 def onclick(event):
@@ -154,7 +159,7 @@ def onclick(event):
             
             # Apply to the mask and spins simultaneously
             mask[y_start:y_end, x_start:x_end] = 0
-            spins[y_start:y_end, x_start:x_end] = 0
+            #spins[y_start:y_end, x_start:x_end] = 0
             
             # Update display immediately
             im.set_data(spins)
@@ -165,3 +170,4 @@ ani = animation.FuncAnimation(fig,step,fargs=(spins, im),frames = 10, interval=1
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 plt.show()
+
