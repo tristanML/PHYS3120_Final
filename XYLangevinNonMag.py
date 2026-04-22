@@ -136,7 +136,7 @@ def step(frame,spins,im):
 
     spins[mask == 0] = 10
 
-    im.set_data(spins)
+    im.set_data((spins+np.pi)%(2*np.pi)-np.pi)
     return [im]
 
 def onclick(event):
