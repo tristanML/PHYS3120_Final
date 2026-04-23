@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.animation as animation
 from matplotlib.widgets import Slider,Button
 import random
+import math
 #--parameters--
 I = 0.1
 k = 1
@@ -12,6 +13,7 @@ dt = 0.005
 J = 5
 N = 100
 gam = 1.5
+W = 100
 
 #magnetic field params
 H0 = 0 #magnitude of magnetic field
@@ -29,6 +31,7 @@ axsliderNH = plt.axes([0.2, 0.07, 0.6, 0.02])
 axsliderJ = plt.axes([0.2, 0.10, 0.6, 0.02])
 axsliderGAM = plt.axes([0.2, 0.13, 0.6, 0.02])
 axsliderI = plt.axes([0.2,0.16,0.6,0.02])
+axsliderW = plt.axes([0.2,0.19,0.6,0.02])
 
 sliderT = Slider(axsliderT,'T', 0, 10.0, valinit = T)
 sliderH0 = Slider(axsliderH0,'H0', 0, 100.0, valinit = H0)
@@ -36,6 +39,7 @@ sliderNH = Slider(axsliderNH,'Width of H', 0, N//2-1, valinit = 0,valstep =1)
 sliderJ = Slider(axsliderJ,'J', 0, 100.0, valinit = J)
 sliderGAM = Slider(axsliderGAM,'Gamma', 0.1, 5.0, valinit = gam)
 sliderI = Slider(axsliderI, 'I', 0.01, 10, valinit = I)
+sliderW = Slider(axsliderW, 'W', 0.01, 500, valinit = W)
 def update_T(val):
     global T
     T = sliderT.val
@@ -62,13 +66,17 @@ def update_I(val):
     global I
     I = sliderI.val
 
+def update_W(val):
+    global W
+    W = sliderW.val
+
 sliderT.on_changed(update_T)
 sliderH0.on_changed(update_H0)
 sliderNH.on_changed(update_NH)
 sliderJ.on_changed(update_J)
 sliderGAM.on_changed(update_GAM)
 sliderI.on_changed(update_I)
-
+sliderW.on_changed(update_W)
 
 #----------------------------------------------
 spins = np.full((N,N), np.pi-2*np.pi*random.random())
@@ -117,9 +125,10 @@ def set_H(a, h_theta, H0, update_spins):
     
 H, alpha = set_H(NH,0,H0,update_spins = False)
 mask = np.ones((N, N))
+totalt = [0]
 # Let's put a "nonmagnetic" square in the middle
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
-def step(frame,spins,im):
+def step(frame,spins,im, totalt):
     eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)*mask
     sTop = np.roll(spins, 1, axis = 1)
     sBot = np.roll(spins, -1, axis = 1)
@@ -131,7 +140,9 @@ def step(frame,spins,im):
                +np.sin(spins-sLeft)*np.roll(mask, 1, axis = 0)
                +np.sin(spins-sRight)*np.roll(mask, -1, axis = 0)
                )*mask
-    hInt = -H*np.sin(spins-alpha)*mask
+    Happ = H*math.sin(math.radians(W*totalt[0]))
+    totalt[0] += dt
+    hInt = -Happ*np.sin(spins-alpha)*mask
     pot = exch+eta+hInt
     #spins[:] = spins + (exch+eta+hInt)*dt/gam
     newSpins = 1/(1+gam/(2*I)*dt)*( (pot)/I*dt**2 + 2*spins  - (1-gam/(2*I)*dt)*prevSpins )
@@ -166,7 +177,7 @@ def onclick(event):
             fig.canvas.draw_idle()
 
 
-ani = animation.FuncAnimation(fig,step,fargs=(spins, im),frames = 10, interval=1,blit=True)
+ani = animation.FuncAnimation(fig,step,fargs=(spins, im, totalt),frames = 10, interval=1,blit=True)
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 plt.show()
