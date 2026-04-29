@@ -129,7 +129,7 @@ totalt = [0]
 # Let's put a "nonmagnetic" square in the middle
 # mask[N//4:3*N//4, N//4:3*N//4] = 0
 def step(frame,spins,im, totalt):
-    eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)*mask
+    eta = (2*gam*I*k*T/dt)**(1/2)*np.random.randn(N,N)*mask
     sTop = np.roll(spins, 1, axis = 1)
     sBot = np.roll(spins, -1, axis = 1)
     sLeft = np.roll(spins, 1, axis = 0)
