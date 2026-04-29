@@ -382,7 +382,7 @@ store_current_cycle_snapshot()
 def step(frame, spins, im, totalt):
     global last_repeat_text, last_fft2d_strength, last_order
 
-    eta = (2 * gam * k * T / dt) ** 0.5 * np.random.randn(N, N) * mask
+    eta = (2 * I * gam * k * T / dt) ** 0.5 * np.random.randn(N, N) * mask
 
     sTop = np.roll(spins, 1, axis=1)
     sBot = np.roll(spins, -1, axis=1)
