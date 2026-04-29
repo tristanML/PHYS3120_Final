@@ -14,7 +14,7 @@ dt = 0.005
 J = 100
 N = 100
 gam = 1.5
-W = 2000
+W = 3250
 
 # magnetic field params
 H0 = 100
@@ -22,6 +22,7 @@ NH = 20
 alpha = 0
 
 # detector params
+RECORD_EVERY_CYCLES = 4
 MAX_CYCLE_SNAPSHOTS = 10
 COMPARE_CYCLES_BACK = 2
 
@@ -418,7 +419,7 @@ def step(frame, spins, im, totalt):
             cycle_snapshots.append((current_cycle, spins.copy()))
             last_snapshot_cycle[0] = current_cycle
 
-            if current_cycle % 2 == 0:
+            if current_cycle % RECORD_EVERY_CYCLES == 0:
                 field_mask = get_field_mask()
 
                 last_order = get_order_parameter(spins, field_mask)
