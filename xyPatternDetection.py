@@ -14,7 +14,7 @@ dt = 0.005
 J = 100
 N = 100
 gam = 1.5
-W = 3000
+W = 2000
 
 # magnetic field params
 H0 = 100
@@ -27,13 +27,13 @@ COMPARE_CYCLES_BACK = 2
 
 cycle_snapshots = deque(maxlen=MAX_CYCLE_SNAPSHOTS)
 repeat_history = []
-diagonal_fourier_history = []
+fft2d_history = []
 order_history = []
 time_history = []
 
 last_snapshot_cycle = [-1]
 last_repeat_text = "Repeat: waiting"
-last_diagonal_fourier_strength = 0.0
+last_fft2d_strength = 0.0
 last_order = 0.0
 
 
@@ -59,14 +59,14 @@ def update_metric_plots():
         return
 
     repeat_line.set_data(time_history, repeat_history)
-    diagfft_line.set_data(time_history, diagonal_fourier_history)
+    fft2d_line.set_data(time_history, fft2d_history)
     m_line.set_data(time_history, order_history)
 
     ax_repeat.relim()
     ax_repeat.autoscale_view()
 
-    ax_diagfft.relim()
-    ax_diagfft.autoscale_view()
+    ax_fft2d.relim()
+    ax_fft2d.autoscale_view()
 
     ax_m.relim()
     ax_m.autoscale_view()
@@ -75,22 +75,22 @@ def update_metric_plots():
 
 
 def reset_detector_history():
-    global last_repeat_text, last_diagonal_fourier_strength, last_order
+    global last_repeat_text, last_fft2d_strength, last_order
 
     cycle_snapshots.clear()
     repeat_history.clear()
-    diagonal_fourier_history.clear()
+    fft2d_history.clear()
     order_history.clear()
     time_history.clear()
 
     repeat_line.set_data([], [])
-    diagfft_line.set_data([], [])
+    fft2d_line.set_data([], [])
     m_line.set_data([], [])
     fig_metrics.canvas.draw_idle()
 
     last_snapshot_cycle[0] = -1
     last_repeat_text = "Repeat: waiting"
-    last_diagonal_fourier_strength = 0.0
+    last_fft2d_strength = 0.0
     last_order = 0.0
 
 
@@ -121,39 +121,26 @@ def angular_rms_difference(a, b, mask=None):
     return np.sqrt(np.mean(diff ** 2))
 
 
-def single_diagonal_fourier_strength(spins, mask=None, direction="main"):
-    rows, cols = spins.shape
-    n = min(rows, cols)
-    idx = np.arange(n)
+def fft2d_structure_strength(spins, mask=None):
+    z = np.exp(1j * spins)
 
-    if direction == "main":
-        theta_line = spins[idx, idx]
-        if mask is not None:
-            valid_line = mask[idx, idx] == 1
-        else:
-            valid_line = np.ones(n, dtype=bool)
+    if mask is not None:
+        valid = mask == 1
 
-    elif direction == "anti":
-        theta_line = spins[idx, cols - 1 - idx]
-        if mask is not None:
-            valid_line = mask[idx, cols - 1 - idx] == 1
-        else:
-            valid_line = np.ones(n, dtype=bool)
+        if np.sum(valid) == 0:
+            return 0.0
 
-    else:
-        raise ValueError("direction must be 'main' or 'anti'")
+        mean_z = np.mean(z[valid])
 
-    theta_line = theta_line[valid_line]
+        z = z.copy()
+        z[~valid] = mean_z
 
-    if theta_line.size < 4:
-        return 0.0
+    z = z - np.mean(z)
 
-    z_line = np.exp(1j * theta_line)
-    z_line = z_line - np.mean(z_line)
-
-    F = np.fft.fft(z_line)
+    F = np.fft.fft2(z)
     power = np.abs(F) ** 2
-    power[0] = 0
+
+    power[0, 0] = 0
 
     total_power = np.sum(power)
 
@@ -161,16 +148,6 @@ def single_diagonal_fourier_strength(spins, mask=None, direction="main"):
         return 0.0
 
     return np.max(power) / total_power
-
-
-def diagonal_fourier_strength(spins, mask=None):
-    main_strength = single_diagonal_fourier_strength(spins, mask, direction="main")
-    anti_strength = single_diagonal_fourier_strength(spins, mask, direction="anti")
-
-    if main_strength + anti_strength == 0:
-        return 0.0
-
-    return 2 * main_strength * anti_strength / (main_strength + anti_strength)
 
 
 def get_order_parameter(spins, mask=None):
@@ -204,11 +181,11 @@ fig, ax = plt.subplots(figsize=(6, 6))
 plt.subplots_adjust(bottom=0.40)
 
 #---live detector plots in a separate window---
-fig_metrics, (ax_repeat, ax_diagfft, ax_m) = plt.subplots(3, 1, figsize=(7, 7))
+fig_metrics, (ax_repeat, ax_fft2d, ax_m) = plt.subplots(3, 1, figsize=(7, 7))
 fig_metrics.tight_layout(pad=2.0)
 
 repeat_line, = ax_repeat.plot([], [], marker="o", markersize=3)
-diagfft_line, = ax_diagfft.plot([], [], marker="o", markersize=3)
+fft2d_line, = ax_fft2d.plot([], [], marker="o", markersize=3)
 m_line, = ax_m.plot([], [], marker="o", markersize=3)
 
 ax_repeat.set_title("2T Repeat Error")
@@ -216,17 +193,17 @@ ax_repeat.set_xlabel("Time")
 ax_repeat.set_ylabel("Error")
 ax_repeat.grid(True)
 
-ax_diagfft.set_title("Field DiagFFT")
-ax_diagfft.set_xlabel("Time")
-ax_diagfft.set_ylabel("DiagFFT")
-ax_diagfft.grid(True)
+ax_fft2d.set_title("Field 2D FFT")
+ax_fft2d.set_xlabel("Time")
+ax_fft2d.set_ylabel("FFT2D")
+ax_fft2d.grid(True)
 
 ax_m.set_title("Field M")
 ax_m.set_xlabel("Time")
 ax_m.set_ylabel("M")
 ax_m.grid(True)
 
-# IMPORTANT: use fig.add_axes, not plt.axes, so controls stay in main window
+# controls stay attached to main window
 axboxT = fig.add_axes([0.2, 0.01, 0.25, 0.035])
 axboxH0 = fig.add_axes([0.6, 0.01, 0.25, 0.035])
 
@@ -402,9 +379,9 @@ store_current_cycle_snapshot()
 
 
 def step(frame, spins, im, totalt):
-    global last_repeat_text, last_diagonal_fourier_strength, last_order
+    global last_repeat_text, last_fft2d_strength, last_order
 
-    eta = (2 * I * gam * k * T / dt) ** 0.5 * np.random.randn(N, N) * mask
+    eta = (2 * gam * k * T / dt) ** 0.5 * np.random.randn(N, N) * mask
 
     sTop = np.roll(spins, 1, axis=1)
     sBot = np.roll(spins, -1, axis=1)
@@ -445,7 +422,7 @@ def step(frame, spins, im, totalt):
                 field_mask = get_field_mask()
 
                 last_order = get_order_parameter(spins, field_mask)
-                last_diagonal_fourier_strength = diagonal_fourier_strength(spins, field_mask)
+                last_fft2d_strength = fft2d_structure_strength(spins, field_mask)
 
                 snapshots_by_cycle = dict(cycle_snapshots)
                 target_cycle = current_cycle - COMPARE_CYCLES_BACK
@@ -455,7 +432,7 @@ def step(frame, spins, im, totalt):
                     repeat_error = angular_rms_difference(spins, old_spins, field_mask)
 
                     repeat_history.append(repeat_error)
-                    diagonal_fourier_history.append(last_diagonal_fourier_strength)
+                    fft2d_history.append(last_fft2d_strength)
                     order_history.append(last_order)
                     time_history.append(totalt[0])
 
@@ -477,7 +454,7 @@ def step(frame, spins, im, totalt):
         last_repeat_text = "Repeat: W must be > 0"
 
     ax.set_title(
-        f"{last_repeat_text} | Field DiagFFT={last_diagonal_fourier_strength:.3f} | Field M={last_order:.3f}",
+        f"{last_repeat_text} | Field FFT2D={last_fft2d_strength:.3f} | Field M={last_order:.3f}",
         fontsize=9
     )
 
