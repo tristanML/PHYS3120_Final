@@ -1,0 +1,119 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import quad
+
+J = 1
+Tc = 2*J/np.arcsinh(1)
+#T = 0.8*Tc
+N = 32
+
+
+Es = []
+Es_sqrd = []
+nSweeps = 1000
+
+spins = np.random.choice([-1,1], size = (N,N))
+def neighbors(i,j):
+    return ([(i+1)%N,j],
+            [(i-1)%N,j],
+            [i,(j+1)%N],
+            [i,(j-1)%N]
+            )
+def metropolis_step(spins,T):
+    i0,j0 = np.random.randint(0,N),np.random.randint(0,N)
+    propSpin = spins[i0,j0]*(-1)
+    E, Eprop = 0,0
+    for k,l in neighbors(i0,j0):
+        E += -J*spins[k,l]*spins[i0,j0]
+        Eprop += -J*spins[k,l]*propSpin
+    dE = Eprop - E
+    if dE < 0:
+        spins[i0,j0] *= -1
+    else:
+        prob = np.exp(-dE/T)
+        if np.random.rand() < prob:
+            spins[i0,j0] *= -1
+
+def get_energy(spins):
+    sTop = np.roll(spins, 1, axis = 1)
+    sBot = np.roll(spins, -1, axis = 1)
+    sLeft = np.roll(spins, 1, axis = 0)
+    sRight = np.roll(spins, -1, axis = 0)
+
+    energy = 1/2*np.sum(-J*spins*(sTop + sBot + sLeft +sRight)) #avoids overcounting
+    return energy
+
+def get_mag(spins):
+    return abs(np.mean(spins))#abs value because of symmetry
+
+def sweep(spins,T):
+    for i in range(0,N**2):
+        metropolis_step(spins,T)
+
+def measure_sweeps(spins, T,nSweeps):
+    ens = []
+    ensSqrd = []
+    samples = []
+    for i in range(0,nSweeps):
+        sweep(spins,T)
+        if i > 2000 and i%25 == 0:
+            samples.append(get_mag(spins))
+            ens.append(get_energy(spins))
+            ensSqrd.append(get_energy(spins)**2)
+    return np.mean(samples),1/(N*T)**2*(np.mean(ensSqrd)-np.mean(ens)**2)
+def trueMag(T):
+    if T < Tc:
+        return (1-np.sinh(2*J/T)**(-4))**(1/8)
+    else:
+        return 0
+
+def freeEnergy(T):
+    beta = 1/T
+    kappa = float( 2*np.sinh(2*J/T)/(np.cosh(2*J/T))**2 )
+    integrand = lambda th: np.log(1/2*(1+np.sqrt(1-kappa**2*np.cos(th)**2)))
+    integral = quad(integrand,0,np.pi)[0]
+    return -T*np.log(2*np.cosh(2*J/T))-T/(2*np.pi)*integral
+
+
+
+def C_H(T,h):
+    return -T*(freeEnergy(T+h)+freeEnergy(T-h)-2*freeEnergy(T))/h**2
+'''
+mags = []
+sweeps = np.linspace(0,nSweeps,nSweeps)
+#spins = np.ones((N,N))
+spins = np.random.choice([-1,1], size = (N,N))
+for i in range(nSweeps):
+    sweep(spins,0.95*Tc)
+    mags.append(get_mag(spins))
+plt.plot(sweeps,mags)
+plt.ylabel("Magnetization")
+plt.xlabel("Number of Sweeps")
+plt.show() 
+'''
+fig, ax = plt.subplots(2, figsize = (10,8))
+fineFRS = np.linspace(0.75,1.25,250)
+frs = np.linspace(0.95,1.0,10)
+Tmags = []
+mags = []
+Tchs = []
+CH = []
+
+for f in frs:
+    spins = np.ones((N,N))
+    m, ch = measure_sweeps(spins,f*Tc,nSweeps)
+    mags.append(m)
+    CH.append(ch)
+
+for f in fineFRS:
+    Tmags.append(trueMag(f*Tc))
+    Tchs.append(C_H(f*Tc, h = 0.008))
+ax[0].plot(fineFRS,Tmags,color = 'black',linestyle = '--', label = 'Analytical Solution')
+ax[0].set_ylabel("Magnetization")
+fig.supxlabel("Temperature (T_c)")
+ax[0].scatter(frs,mags,label = 'Simulation Results')
+ax[1].plot(fineFRS,Tchs, color = 'black', linestyle = '--', label = 'Analytical Solution')
+ax[1].set_ylabel("Specific Heat C_H")
+ax[1].scatter(frs,CH)
+plt.figlegend()
+plt.show()
