@@ -117,7 +117,7 @@ def set_H(a, h_theta, H0, update_spins):
 H, alpha = set_H(NH,0,H0,update_spins = False)
 def step(frame,spins,im):
     #global prevSpins
-    eta = (2*gam*k*T/dt)**(1/2)*np.random.randn(N,N)
+    eta = (2*gam*I*k*T/dt)**(1/2)*np.random.randn(N,N)
     sTop = np.roll(spins, 1, axis = 1)
     sBot = np.roll(spins, -1, axis = 1)
     sLeft = np.roll(spins, 1, axis = 0)
