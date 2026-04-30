@@ -9,14 +9,15 @@ k = 1
 #----
 T = 0.4
 dt = 0.005
-J = 5
+J = 100
 N = 100
 gam = 1.5
-
+om = 75
 #magnetic field params
 H0 = 0 #magnitude of magnetic field
 NH = 0 #width of magnetic field, measured in cells
 alpha = 0
+h0 = 0
 #--------------
 
 
@@ -90,8 +91,6 @@ def reset2(event):
     prevSpins = spins.copy()
 
 
-def dTh(th1,th2):
-    return np.atan2(np.sin(th1-th2),np.cos(th1-th2))
 button1.on_clicked(reset1)
 button2.on_clicked(reset2)
 im = ax.imshow(spins, cmap='hsv', vmin=-np.pi, vmax=np.pi, interpolation='nearest')
@@ -116,15 +115,18 @@ def set_H(a, h_theta, H0, update_spins):
         return H, h_theta
 H, alpha = set_H(NH,0,H0,update_spins = False)
 def step(frame,spins,im):
+    global h0
+    h0 += om*dt
     #global prevSpins
-    eta = (2*gam*I*k*T/dt)**(1/2)*np.random.randn(N,N)
+    eta = (2*I*gam*k*T/dt)**(1/2)*np.random.randn(N,N)
     sTop = np.roll(spins, 1, axis = 1)
     sBot = np.roll(spins, -1, axis = 1)
     sLeft = np.roll(spins, 1, axis = 0)
     sRight = np.roll(spins, -1, axis = 0)
 
-    exch = -J*(np.sin(dTh(spins,sTop))+np.sin(dTh(spins,sBot))+np.sin(dTh(spins,sLeft))+np.sin(dTh(spins,sRight)))
-    hInt = -H*np.sin(spins-alpha)
+    exch = -J*(np.sin(spins-sTop)+np.sin(spins-sBot)+np.sin(spins-sLeft)+np.sin(spins-sRight))
+    hInt = -H*np.sin(spins-(h0)) #H rotating in plane
+    #hInt = -H*np.sin(h0)*np.sin(spins-alpha) #H oscillating in magnitude 
     pot = exch+eta+hInt
     #spins[:] = spins + (exch+eta+hInt)*dt/gam
     newSpins = 1/(1+gam/(2*I)*dt)*( (pot)/I*dt**2 + 2*spins  - (1-gam/(2*I)*dt)*prevSpins )
@@ -132,6 +134,7 @@ def step(frame,spins,im):
     spins[:] = newSpins
     im.set_data((spins+np.pi)%(2*np.pi)-np.pi)
     return [im]
+
 
 ani = animation.FuncAnimation(fig,step,fargs=(spins, im),frames = 100, interval=1,blit=True)
 
