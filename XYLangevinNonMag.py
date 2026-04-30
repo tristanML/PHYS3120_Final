@@ -140,7 +140,7 @@ def step(frame,spins,im, totalt):
                +np.sin(spins-sLeft)*np.roll(mask, 1, axis = 0)
                +np.sin(spins-sRight)*np.roll(mask, -1, axis = 0)
                )*mask
-    Happ = H*math.sin(math.radians(W*totalt[0]))
+    Happ = H*math.sin(W*totalt[0])
     totalt[0] += dt
     hInt = -Happ*np.sin(spins-alpha)*mask
     pot = exch+eta+hInt
