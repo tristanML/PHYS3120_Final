@@ -1,0 +1,111 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.animation as animation
+from matplotlib.widgets import Slider,Button
+import random
+
+#--parameters--
+I = 0.1
+k = 1
+#----
+T = 0.4
+dt = 0.005
+J = 100
+N = 100
+gam = 1.5
+
+#magnetic field params
+H0 = 100 #magnitude of magnetic field
+alpha = 0
+om = 40
+#--------------
+
+def step(spins,nt):
+    global prevSpins
+    eta = (2*I*gam*k*T/dt)**(1/2)*np.random.randn(N,N)
+    sTop = np.roll(spins, 1, axis = 1)
+    sBot = np.roll(spins, -1, axis = 1)
+    sLeft = np.roll(spins, 1, axis = 0)
+    sRight = np.roll(spins, -1, axis = 0)
+
+    exch = -J*(np.sin(spins-sTop)+np.sin(spins-sBot)+np.sin(spins-sLeft)+np.sin(spins-sRight))
+    #hInt = -H0*np.sin(spins-(alpha+nt*dt*om)) #H rotating in plane
+    hInt = -H0*np.sin(nt*om*dt)*np.sin(spins-alpha) #H oscillating in magnitude 
+    pot = exch+eta+hInt 
+    #spins[:] = spins + (exch+eta+hInt)*dt/gam
+    newSpins = 1/(1+gam/(2*I)*dt)*( (pot)/I*dt**2 + 2*spins  - (1-gam/(2*I)*dt)*prevSpins )
+    prevSpins[:] = spins[:]
+    spins[:] = newSpins
+
+def get_MdotH(spins,alpha): #Gets M projected along H axis
+    Mx = np.mean(np.cos(spins))
+    My = np.mean(np.sin(spins))
+    Mth = np.atan2(My,Mx)
+    M = (Mx**2+My**2)**(1/2)
+    MdotH = M*np.cos(Mth - alpha)
+    return MdotH
+def get_mag(spins):
+    Mx = np.mean(np.cos(spins))
+    My = np.mean(np.sin(spins))
+    #Mth = np.atan2(My,Mx)
+    M = (Mx**2+My**2)**(1/2)
+    return M
+def get_mean_angle(spins):
+    Mx = np.mean(np.cos(spins))
+    My = np.mean(np.sin(spins))
+    return np.atan2(My,Mx)
+fig, ax = plt.subplots(2)
+fig.tight_layout()
+spins = np.random.uniform(-np.pi, np.pi, (N,N))
+prevSpins = spins.copy()
+times = np.linspace(0, 10000, 10000)
+#--Code for generating Mx plots-------
+
+mags= []
+appfield = []
+for t in times:
+    step(spins,t)
+    #appfield.append((alpha + om*t*dt+np.pi)%(2*np.pi)-np.pi)
+    mags.append(np.cos(get_mean_angle(spins)))
+fourier = np.fft.rfft(mags)
+freq = np.fft.rfftfreq(len(mags), d=1)
+ax[0].plot(times,mags, zorder = 2)
+ax[0].set_title('Projection of M along x axis')
+ax[0].set_ylabel('Magnetization')
+ax[0].set_xlabel('Steps')
+
+ax[1].plot(freq,fourier.real, zorder = 1)
+fH = om/(2*np.pi)*dt
+ax[1].vlines(x = fH, ymin = -1000, ymax = 1000, linestyle = '--', color = 'black', zorder =2, alpha = 0.4, label = 'Frequency of H')
+ax[1].set_title('Frequency Domain of Mx')
+ax[1].set_ylabel('Arb. Units')
+ax[1].set_xlabel('Frequency (1/Steps)')
+ax[1].legend()
+ax[1].set_ylim(-1000,1000)
+plt.show()
+
+'''
+#--Code for Net Magnetization-----
+mags= []
+appfield = []
+for t in times:
+    step(spins,t)
+    #appfield.append((alpha + om*t*dt+np.pi)%(2*np.pi)-np.pi)
+    mags.append(get_MdotH(spins, alpha + om*t*dt))
+fourier = np.fft.rfft(mags)
+freq = np.fft.rfftfreq(len(mags), d=1)
+ax[0].plot(times,mags, zorder = 2)
+ax[0].set_title('Alignment of M along H')
+ax[0].set_ylabel('Magnetization')
+ax[0].set_xlabel('Steps')
+
+ax[1].plot(freq,fourier.real, zorder = 1)
+fH = om/(2*np.pi)*dt
+ax[1].vlines(x = fH, ymin = -1000, ymax = 1000, linestyle = '--', color = 'black', zorder =2, alpha = 0.4, label = 'Frequency of H')
+ax[1].set_title('Frequency Domain')
+ax[1].set_ylabel('Arb. Units')
+ax[1].set_xlabel('Frequency (1/Steps)')
+ax[1].legend()
+ax[1].set_ylim(-1000,1000)
+plt.show()
+'''
