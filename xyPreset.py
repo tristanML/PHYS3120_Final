@@ -11,14 +11,13 @@ k = 1
 T = 0
 dt = 0.005
 J = 100
-N = 100
 gam = 1.5
 W = 50
 
-PRESET_FILE = "spin_preset.csv"
+PRESET_FILE = "frame.csv"
 
 # magnetic field params
-H0 = 100
+H0 = 0
 NH = 30
 alpha = 0
 
@@ -34,25 +33,64 @@ last_fft2d_strength = 0.0
 last_order = 0.0
 
 
+def wrap_angles(arr):
+    return (arr + np.pi) % (2 * np.pi) - np.pi
+
+
 def load_spin_preset():
-    loaded_spins = np.loadtxt(PRESET_FILE, delimiter=",")
+    loaded_spins = np.loadtxt(PRESET_FILE, delimiter=",", ndmin=2)
 
     if loaded_spins.ndim != 2:
-        raise ValueError("spin_preset.csv must be a 2D array")
+        raise ValueError("frame.csv must be a 2D array")
 
-    if loaded_spins.shape[0] != loaded_spins.shape[1]:
-        raise ValueError("spin_preset.csv must be square, like 100 x 100")
-
-    loaded_spins = (loaded_spins + np.pi) % (2 * np.pi) - np.pi
+    loaded_spins = wrap_angles(loaded_spins)
 
     return loaded_spins
 
 
+def clamp_NH_to_shape(value, shape):
+    rows, cols = shape
+    max_width = max(0, min(rows, cols) // 2 - 1)
+    return max(0, min(int(value), max_width))
+
+
 spins = load_spin_preset()
-N = spins.shape[0]
-NH = max(0, min(NH, N // 2 - 1))
+ROWS, COLS = spins.shape
+NH = clamp_NH_to_shape(NH, spins.shape)
+
+prevSpins = spins.copy()
+mask = np.ones(spins.shape)
+totalt = [0]
 
 print(f"Loaded starting state from: {os.path.abspath(PRESET_FILE)}")
+print(f"CSV shape: {ROWS} rows x {COLS} columns")
+
+
+def set_H(a, h_theta, H0, update_spins=False):
+    a = int(a)
+    H = np.zeros(spins.shape)
+
+    if a <= 0:
+        return H, h_theta
+
+    center_row = ROWS // 2
+    center_col = COLS // 2
+
+    row_start = max(0, center_row - a)
+    row_end = min(ROWS, center_row + a + 1)
+
+    col_start = max(0, center_col - a)
+    col_end = min(COLS, center_col + a + 1)
+
+    H[row_start:row_end, col_start:col_end] = H0
+
+    if update_spins:
+        spins[row_start:row_end, col_start:col_end] = h_theta
+
+    return H, h_theta
+
+
+H, alpha = set_H(NH, 0, H0, update_spins=False)
 
 
 def get_drive_period():
@@ -209,8 +247,7 @@ def update_H0(text):
 def update_NH(text):
     global NH, H, alpha
     try:
-        NH = int(float(text))
-        NH = max(0, min(NH, N // 2 - 1))
+        NH = clamp_NH_to_shape(int(float(text)), spins.shape)
         H, alpha = set_H(NH, alpha, H0, update_spins=False)
         reset_metric_history()
     except ValueError:
@@ -261,9 +298,6 @@ boxGAM.on_submit(update_GAM)
 boxI.on_submit(update_I)
 boxW.on_submit(update_W)
 
-#----------------------------------------------
-prevSpins = spins.copy()
-
 button1_ax = fig.add_axes([0.2, 0.23, 0.25, 0.05])
 button2_ax = fig.add_axes([0.5, 0.23, 0.25, 0.05])
 button3_ax = fig.add_axes([0.35, 0.30, 0.30, 0.05])
@@ -272,40 +306,73 @@ button1 = Button(button1_ax, "Reset CSV")
 button2 = Button(button2_ax, "Randomize Spins")
 button3 = Button(button3_ax, "Reset Metrics")
 
+my_cmap = plt.get_cmap("hsv").copy()
+my_cmap.set_over("black")
+
+
+def get_display_spins():
+    display_spins = wrap_angles(spins).copy()
+    display_spins[mask == 0] = 10
+    return display_spins
+
+
+im = ax.imshow(
+    get_display_spins(),
+    cmap=my_cmap,
+    vmin=-np.pi,
+    vmax=np.pi,
+    interpolation="nearest"
+)
+
+plt.colorbar(im, ax=ax)
+
+
+def update_main_image():
+    im.set_data(get_display_spins())
+
+    im.set_extent((-0.5, COLS - 0.5, ROWS - 0.5, -0.5))
+    ax.set_xlim(-0.5, COLS - 0.5)
+    ax.set_ylim(ROWS - 0.5, -0.5)
+
+    fig.canvas.draw_idle()
+
 
 def reset1(event):
-    global prevSpins
+    global spins, prevSpins, mask, H, ROWS, COLS, NH, alpha
 
     loaded_spins = load_spin_preset()
 
-    if loaded_spins.shape != spins.shape:
-        print("CSV shape does not match current simulation shape.")
-        print(f"CSV shape: {loaded_spins.shape}, current shape: {spins.shape}")
-        return
+    spins = loaded_spins.copy()
+    prevSpins = spins.copy()
 
-    spins[:] = loaded_spins
-    prevSpins[:] = spins[:]
+    ROWS, COLS = spins.shape
+    NH = clamp_NH_to_shape(NH, spins.shape)
+
+    mask = np.ones(spins.shape)
+    H, alpha = set_H(NH, alpha, H0, update_spins=False)
 
     reset_metric_history()
     totalt[0] = 0
 
-    display_spins = (spins + np.pi) % (2 * np.pi) - np.pi
-    display_spins = display_spins.copy()
-    display_spins[mask == 0] = 10
-    im.set_data(display_spins)
+    update_main_image()
 
-    ax.set_title("Reloaded state from spin_preset.csv")
+    ax.set_title(f"Reloaded {ROWS} x {COLS} state from frame.csv")
     fig.canvas.draw_idle()
 
     print(f"Reloaded state from: {os.path.abspath(PRESET_FILE)}")
+    print(f"CSV shape: {ROWS} rows x {COLS} columns")
 
 
 def reset2(event):
-    global prevSpins
-    spins[:] = np.random.uniform(-np.pi, np.pi, size=(N, N))
-    prevSpins[:] = spins[:]
+    global spins, prevSpins
+
+    spins[:] = np.random.uniform(-np.pi, np.pi, size=spins.shape)
+    prevSpins = spins.copy()
+
     reset_metric_history()
     totalt[0] = 0
+
+    update_main_image()
 
 
 def reset3(event):
@@ -316,19 +383,6 @@ button1.on_clicked(reset1)
 button2.on_clicked(reset2)
 button3.on_clicked(reset3)
 
-my_cmap = plt.get_cmap("hsv").copy()
-my_cmap.set_over("black")
-
-im = ax.imshow(
-    spins,
-    cmap=my_cmap,
-    vmin=-np.pi,
-    vmax=np.pi,
-    interpolation="nearest"
-)
-
-plt.colorbar(im, ax=ax)
-
 
 def get_Mag(spins):
     y = np.mean(np.sin(spins))
@@ -336,32 +390,10 @@ def get_Mag(spins):
     return np.atan2(y, x)
 
 
-def set_H(a, h_theta, H0, update_spins):
-    a = int(a)
-    H = np.zeros((N, N))
+def step(frame):
+    global prevSpins, last_fft2d_strength, last_order
 
-    if a == 0:
-        return H, h_theta
-    else:
-        for i in range(N // 2 - a, N // 2 + a + 1):
-            for j in range(N // 2 - a, N // 2 + a + 1):
-                H[i][j] = H0
-                if update_spins:
-                    spins[i][j] = alpha
-
-        return H, h_theta
-
-
-H, alpha = set_H(NH, 0, H0, update_spins=False)
-
-mask = np.ones((N, N))
-totalt = [0]
-
-
-def step(frame, spins, im, totalt):
-    global last_fft2d_strength, last_order
-
-    eta = (2 * I * gam * k * T / dt) ** 0.5 * np.random.randn(N, N) * mask
+    eta = (2 * I * gam * k * T / dt) ** 0.5 * np.random.randn(*spins.shape) * mask
 
     sTop = np.roll(spins, 1, axis=1)
     sBot = np.roll(spins, -1, axis=1)
@@ -414,10 +446,7 @@ def step(frame, spins, im, totalt):
         fontsize=9
     )
 
-    display_spins = (spins + np.pi) % (2 * np.pi) - np.pi
-    display_spins = display_spins.copy()
-    display_spins[mask == 0] = 10
-    im.set_data(display_spins)
+    im.set_data(get_display_spins())
 
     spins[mask == 0] = 10
 
@@ -425,29 +454,27 @@ def step(frame, spins, im, totalt):
 
 
 def onclick(event):
-    if event.inaxes == ax:
+    if event.inaxes == ax and event.xdata is not None and event.ydata is not None:
         ix, iy = int(round(event.xdata)), int(round(event.ydata))
 
-        if 0 <= ix < N and 0 <= iy < N:
+        if 0 <= ix < COLS and 0 <= iy < ROWS:
             r = 10
 
-            x_start, x_end = max(0, ix - r), min(N, ix + r + 1)
-            y_start, y_end = max(0, iy - 10 * r), min(N, iy + 10 * r + 1)
+            x_start = max(0, ix - r)
+            x_end = min(COLS, ix + r + 1)
+
+            y_start = max(0, iy - 10 * r)
+            y_end = min(ROWS, iy + 10 * r + 1)
 
             mask[y_start:y_end, x_start:x_end] = 0
             reset_metric_history()
 
-            display_spins = (spins + np.pi) % (2 * np.pi) - np.pi
-            display_spins = display_spins.copy()
-            display_spins[mask == 0] = 10
-            im.set_data(display_spins)
-            fig.canvas.draw_idle()
+            update_main_image()
 
 
 ani = animation.FuncAnimation(
     fig,
     step,
-    fargs=(spins, im, totalt),
     frames=10,
     interval=1,
     blit=False
